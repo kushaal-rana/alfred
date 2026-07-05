@@ -52,6 +52,7 @@ def save_json(path, data):
 class Telegram:
     def __init__(self, token):
         self.base = f"https://api.telegram.org/bot{token}"
+        self.file_base = f"https://api.telegram.org/file/bot{token}"
 
     def call(self, method, http_timeout=65, **params):
         data = urllib.parse.urlencode(params).encode()
@@ -76,6 +77,23 @@ class Telegram:
             self.call("sendChatAction", chat_id=chat_id, action="typing", http_timeout=10)
         except Exception:
             pass
+
+    def download_file(self, file_id, dest_dir):
+        """Fetch a Telegram file into dest_dir; returns the local path or None."""
+        try:
+            info = self.call("getFile", file_id=file_id)
+            remote = info["result"]["file_path"]
+            ext = os.path.splitext(remote)[1] or ".jpg"
+            name = time.strftime("%Y%m%d-%H%M%S") + "-" + file_id[-8:] + ext
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, name)
+            with urllib.request.urlopen(f"{self.file_base}/{remote}", timeout=60) as resp, \
+                    open(dest, "wb") as f:
+                f.write(resp.read())
+            return dest
+        except Exception as e:
+            log(f"file download failed: {e}")
+            return None
 
 
 def clean_env(cfg):
@@ -129,14 +147,25 @@ def run_claude(cfg, state, text):
 def handle(cfg, state, tg, msg):
     chat_id = msg["chat"]["id"]
     user_id = msg.get("from", {}).get("id")
-    text = (msg.get("text") or "").strip()
+    text = (msg.get("text") or msg.get("caption") or "").strip()
 
     if user_id not in cfg["allowed_user_ids"]:
         log(f"REJECTED message from unauthorized user {user_id}")
         return
 
+    photos = msg.get("photo") or []
+    if photos:
+        largest = max(photos, key=lambda p: p.get("file_size") or 0)
+        inbox = os.path.join(cfg["workdir"], ".telegram-inbox")
+        path = tg.download_file(largest["file_id"], inbox)
+        if not path:
+            tg.send(chat_id, "Alfred: couldn't download that photo. Try sending it again.")
+            return
+        text = (f'[Kushaal sent a photo via Telegram, saved at "{path}". '
+                f"Read/view the image file before responding.]\n{text}").strip()
+
     if not text:
-        tg.send(chat_id, "Alfred: I only handle text messages for now.")
+        tg.send(chat_id, "Alfred: I only handle text and photo messages for now.")
         return
 
     if text.lower() in ("/new", "/reset"):
