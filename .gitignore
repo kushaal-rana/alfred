@@ -1,0 +1,5 @@
+# Secrets and runtime state — never commit
+config.json
+state.json
+logs/
+*.tmp

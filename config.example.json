@@ -1,0 +1,8 @@
+{
+  "token": "YOUR_TELEGRAM_BOT_TOKEN",
+  "claude_oauth_token": "YOUR_CLAUDE_OAUTH_TOKEN (from: claude setup-token)",
+  "allowed_user_ids": [123456789],
+  "workdir": "/absolute/path/to/your/workspace",
+  "claude_path": "/absolute/path/to/claude",
+  "turn_timeout": 900
+}
